@@ -8,13 +8,13 @@ import java.io.Serializable
 
 class ClusterActorConnection(rmqUserName: String,
                              rmqPassword: String,
-                             prefix: String) :
+                             val domain: String) :
         ClusterConnection(
                 listOf(Address("cluster0.orcarium.com"),
                         Address("cluster1.orcarium.com"),
                         Address("cluster2.orcarium.com"),
                         Address("cluster3.orcarium.com")),
-                rmqUserName, rmqPassword, "orca", prefix) {
+                rmqUserName, rmqPassword, "orca", domain.reverseDomain()) {
 
     private val gson = Gson()
 
@@ -22,7 +22,8 @@ class ClusterActorConnection(rmqUserName: String,
         try {
             val event = gson.fromJson<Event>(String(data))
             context.parent().tell(ClusterEvent(event, future), self())
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            e.printStackTrace()
             future.complete(false)
         }
     }
@@ -36,20 +37,21 @@ class ClusterActorConnection(rmqUserName: String,
     }
 }
 
-class ClusterEvent(val event: Event, val future: CompletableFuture<Boolean>)
+data class ClusterEvent(val event: Event, val future: CompletableFuture<Boolean>)
 
-class Event(
-        val eventId: String,
-        val eventType: String?
+data class Event(
+        val eventId: String?,
+        val eventType: String?,
+        val message: Message?
 ) : Serializable
 
-class Message(
+data class Message(
         val sender: User,
         val name: String,
         val routingKey: String
 ) : Serializable
 
-class User(val name: String,
+data class User(val name: String,
            val userName: String,
            val routingKey: String,
            val emails: List<String>,

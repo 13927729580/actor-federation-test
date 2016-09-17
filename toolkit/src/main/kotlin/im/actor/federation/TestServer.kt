@@ -31,6 +31,13 @@ class TestServer : UntypedActor() {
     }
 
     override fun onReceive(message: Any?) {
-
+        when (message) {
+            is ClusterEvent -> {
+                // Log Event
+                println("Cluster Event: " + message.event)
+                // Mark as received
+                message.future.complete(true)
+            }
+        }
     }
 }

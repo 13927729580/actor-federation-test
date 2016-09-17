@@ -16,6 +16,7 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
     }
     private var connection: Connection? = null
     private var channel: Channel? = null
+    private var channelIndex: Int = 0
 
     // Connection Management
 
@@ -28,6 +29,7 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
         if (this.connection != null) {
             return
         }
+        println("Trying to connect to cluster")
         try {
             connection = connectionFactory!!.newConnection(address)
             channel = connection!!.createChannel()
@@ -41,7 +43,13 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
             channel!!.queueBind("cluster.$prefix.main", "cluster.$prefix", "main")
             channel!!.queueBind("cluster.$prefix.ephemeral", "cluster.$prefix", "ephemeral")
             channel!!.queueBind("cluster.$prefix.rpc", "cluster.$prefix", "rpc")
-            channel!!.basicConsumeAck("cluster.$prefix.main") { body, future ->
+
+            val chId = channelIndex
+            channel!!.basicConsumeAck("cluster.$prefix.main") { body, deliveryTag ->
+                val future = CompletableFuture<Boolean>()
+                future.thenApply {
+                    self().tell(AckDelivery(deliveryTag, chId), self())
+                }
                 self().tell(EventMessage(body, future), self())
             }
             channel!!.basicConsume("cluster.$prefix.ephemeral") {
@@ -50,27 +58,21 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
             channel!!.basicConsume("cluster.$prefix.rpc") {
                 self().tell(RPCMessage(it), self())
             }
+            println("Successfully connected to cluster")
         } catch (_: IOException) {
-            if (channel != null) {
-                try {
-                    channel!!.close()
-                } catch (_: Exception) {
-                }
-                channel = null
-            }
-            if (connection != null) {
-                try {
-                    connection!!.close()
-                } catch (_: Exception) {
-                }
-                connection = null
-            }
+            freeConnection()
+            println("Unable to connect to cluster")
             Thread.sleep(1000)
             self().tell(TryConnection(), self())
         }
     }
 
     fun connectionDies() {
+        freeConnection()
+        tryConnection()
+    }
+
+    fun freeConnection() {
         if (channel != null) {
             try {
                 channel!!.close()
@@ -85,7 +87,7 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
             }
             connection = null
         }
-        tryConnection()
+        channelIndex++
     }
 
     //
@@ -97,6 +99,12 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
     abstract fun onEphemeralMessage(data: ByteArray)
 
     abstract fun onRpcMessage(data: ByteArray)
+
+    private fun onMessageAck(deliveryTag: Long, chId: Int) {
+        if (channelIndex == chId) {
+            channel!!.basicAck(deliveryTag, false)
+        }
+    }
 
     //
     // Shutdown
@@ -118,6 +126,7 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
             is EventMessage -> onEventMessage(message.body, message.future)
             is EphemeralMessage -> onEphemeralMessage(message.body)
             is RPCMessage -> onRpcMessage(message.body)
+            is AckDelivery -> onMessageAck(message.deliveryTag, message.chId)
             else -> unhandled(message)
         }
     }
@@ -132,3 +141,5 @@ private class EventMessage(val body: ByteArray, val future: CompletableFuture<Bo
 private class EphemeralMessage(val body: ByteArray)
 
 private class RPCMessage(val body: ByteArray)
+
+private class AckDelivery(val deliveryTag: Long, val chId: Int)
