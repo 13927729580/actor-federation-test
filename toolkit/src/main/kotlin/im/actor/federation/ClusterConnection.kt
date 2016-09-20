@@ -100,6 +100,12 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
 
     abstract fun onRpcMessage(data: ByteArray)
 
+    fun sendEventMessage(dest: String, data: ByteArray) {
+        channel!!.basicPublish("cluster.$dest", "main", AMQP.BasicProperties.Builder()
+                .deliveryMode(2)
+                .build(), data)
+    }
+
     private fun onMessageAck(deliveryTag: Long, chId: Int) {
         if (channelIndex == chId) {
             channel!!.basicAck(deliveryTag, false)
@@ -127,6 +133,7 @@ abstract class ClusterConnection(val address: List<Address>, val rmqUserName: St
             is EphemeralMessage -> onEphemeralMessage(message.body)
             is RPCMessage -> onRpcMessage(message.body)
             is AckDelivery -> onMessageAck(message.deliveryTag, message.chId)
+
             else -> unhandled(message)
         }
     }

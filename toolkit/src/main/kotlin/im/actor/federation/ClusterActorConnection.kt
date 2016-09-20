@@ -2,9 +2,7 @@ package im.actor.federation
 
 import com.rabbitmq.client.Address
 import java.util.concurrent.CompletableFuture
-import com.github.salomonbrys.kotson.*
-import com.google.gson.Gson
-import java.io.Serializable
+import im.actor.federation.api.Event
 
 class ClusterActorConnection(rmqUserName: String,
                              rmqPassword: String,
@@ -16,11 +14,10 @@ class ClusterActorConnection(rmqUserName: String,
                         Address("cluster3.orcarium.com")),
                 rmqUserName, rmqPassword, "orca", domain.reverseDomain()) {
 
-    private val gson = Gson()
 
     override fun onEventMessage(data: ByteArray, future: CompletableFuture<Boolean>) {
         try {
-            val event = gson.fromJson<Event>(String(data))
+            val event = Event.parseFrom(data)
             context.parent().tell(ClusterEvent(event, future), self())
         } catch (e: Exception) {
             e.printStackTrace()
@@ -35,25 +32,19 @@ class ClusterActorConnection(rmqUserName: String,
     override fun onRpcMessage(data: ByteArray) {
         // Not supported yet
     }
+
+    fun sendEventMessage(dest: String, event: Event) {
+        sendEventMessage(dest, event.toByteArray())
+    }
+
+    override fun onReceive(message: Any?) {
+        when (message) {
+            is OutClusterEvent -> sendEventMessage(message.dest, message.event)
+            else -> super.onReceive(message)
+        }
+    }
 }
 
+data class OutClusterEvent(val event: Event, val dest: String)
+
 data class ClusterEvent(val event: Event, val future: CompletableFuture<Boolean>)
-
-data class Event(
-        val eventId: String?,
-        val eventType: String?,
-        val message: Message?
-) : Serializable
-
-data class Message(
-        val sender: User,
-        val name: String,
-        val routingKey: String
-) : Serializable
-
-data class User(val name: String,
-           val userName: String,
-           val routingKey: String,
-           val emails: List<String>,
-           val phones: List<String>
-) : Serializable

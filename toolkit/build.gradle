@@ -7,19 +7,36 @@ buildscript {
 
     repositories {
         mavenCentral()
+        jcenter()
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.0'
     }
+}
+
+repositories {
+    mavenCentral()
+    jcenter()
 }
 
 apply plugin: 'java'
 apply plugin: 'kotlin'
+apply plugin: 'com.google.protobuf'
+apply plugin: 'idea'
 
 sourceCompatibility = 1.8
 
-repositories {
-    mavenCentral()
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.0.0'
+    }
+}
+
+idea {
+    module {
+        sourceDirs += file("${protobuf.generatedFilesBaseDir}/main/java");
+    }
 }
 
 dependencies {
@@ -31,8 +48,6 @@ dependencies {
     // Akka
     compile "com.typesafe.akka:akka-actor_2.11:$akka_version"
     compile "com.typesafe.akka:akka-http-core_2.11:$akka_version"
-    compile "com.typesafe.akka:akka-http_2.11:$akka_version"
-    compile "com.typesafe.akka:akka-http-jackson_2.11:$akka_version"
     compile "com.typesafe.akka:akka-persistence_2.11:$akka_version"
     compile "com.typesafe:config:1.3.0"
     compile "org.iq80.leveldb:leveldb:0.7"
@@ -41,7 +56,9 @@ dependencies {
     // Cluster Connection
     compile "com.rabbitmq:amqp-client:3.6.5"
     compile 'com.github.salomonbrys.kotson:kotson:2.3.0'
+    compile 'com.google.protobuf:protobuf-java:3.0.0'
 
     // Tests
     testCompile group: 'junit', name: 'junit', version: '4.11'
 }
+apply plugin: 'idea'
